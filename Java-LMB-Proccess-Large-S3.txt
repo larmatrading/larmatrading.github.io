@@ -1,0 +1,61 @@
+public class S3ProcessingLambda implements RequestHandler<S3Event, Void> {
+
+    private static final String FUNCTION_NAME = "my-lambda-function";
+    private static final String FILE_KEY = "my-file.txt";
+
+    @Override
+    public Void handleRequest(S3Event event, Context context) {
+        // Get the S3 bucket and key from the event
+        String bucketName = event.getRecords().get(0).getS3().getBucket().getName();
+        String key = event.getRecords().get(0).getS3().getObject().getKey();
+        
+        // Download the file from S3 to local file system
+        File file = new File("/tmp/" + key);
+        AmazonS3 s3Client = AmazonS3ClientBuilder.defaultClient();
+        s3Client.getObject(new GetObjectRequest(bucketName, key), file);
+
+        // Process the file in chunks
+        int bufferSize = 1024 * 1024; // 1MB buffer size
+        long position = 0;
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            char[] buffer = new char[bufferSize];
+            int charsRead = reader.read(buffer, 0, bufferSize);
+            while (charsRead > 0) {
+                // Do some processing on the chunk of data
+                String chunk = new String(buffer, 0, charsRead);
+                processChunk(chunk);
+
+                // Update position in the file and check if there is more to process
+                position += charsRead;
+                if (position < file.length()) {
+                    // If there is more to process, invoke another instance of the same function asynchronously
+                    AWSLambda lambda = AWSLambdaClientBuilder.defaultClient();
+                    InvokeRequest invokeRequest = new InvokeRequest()
+                            .withFunctionName(FUNCTION_NAME)
+                            .withPayload("{\"key\":\"" + FILE_KEY + "\",\"position\":" + position + "}")
+                            .withInvocationType(InvocationType.Event);
+                    lambda.invokeAsync(invokeRequest);
+                }
+
+                // Read the next chunk of data
+                charsRead = reader.read(buffer, 0, bufferSize);
+            }
+        } catch (IOException e) {
+            // Handle any errors
+            e.printStackTrace();
+        }
+
+        // Upload the processed results to S3 or do some other processing as needed
+        uploadResultsToS3();
+
+        return null;
+    }
+
+    private void processChunk(String chunk) {
+        // Process the chunk of data
+        System.out.println("Processing chunk: " + chunk);
+    }
+
+    private void uploadResultsToS3() {
+        // Upload the results to S3
+        System.out.println("Uploading results
