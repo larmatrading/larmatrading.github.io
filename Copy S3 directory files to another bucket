@@ -1,0 +1,27 @@
+
+import boto3
+
+s3 = boto3.resource('s3')
+
+def copy_objects(event, context):
+    source_bucket = event['SourceBucket']
+    source_prefix = event['SourcePrefix']
+    destination_bucket = event['DestinationBucket']
+    destination_prefix = event['DestinationPrefix']
+
+    # Use the list_objects_v2 API operation to recursively list all objects
+    # and subdirectories under the source prefix
+    objects_to_copy = s3.meta.client.list_objects_v2(
+        Bucket=source_bucket,
+        Prefix=source_prefix
+    )
+    while True:
+        # Iterate over the objects to copy
+        for obj in objects_to_copy.get('Contents', []):
+            source_key = obj['Key']
+            destination_key = source_key.replace(source_prefix, destination_prefix)
+            # Copy the object to the destination bucket and prefix
+            s3.Object(destination_bucket, destination_key).copy_from(
+                CopySource={
+                    'Bucket': source_bucket,
+                    'Key': source_key
