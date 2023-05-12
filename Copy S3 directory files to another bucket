@@ -1,9 +1,8 @@
-
 import boto3
 
 s3 = boto3.resource('s3')
 
-def copy_objects(event, context):
+def lambda_handler(event, context):
     source_bucket = event['SourceBucket']
     source_prefix = event['SourcePrefix']
     destination_bucket = event['DestinationBucket']
@@ -25,3 +24,20 @@ def copy_objects(event, context):
                 CopySource={
                     'Bucket': source_bucket,
                     'Key': source_key
+                }
+            )
+        # Check if there are more objects to retrieve
+        if objects_to_copy.get('IsTruncated'):
+            continuation_token = objects_to_copy.get('NextContinuationToken')
+            objects_to_copy = s3.meta.client.list_objects_v2(
+                Bucket=source_bucket,
+                Prefix=source_prefix,
+                ContinuationToken=continuation_token
+            )
+        else:
+            break
+
+    return {
+        'statusCode': 200,
+        'body': 'Objects copied successfully!'
+    }
